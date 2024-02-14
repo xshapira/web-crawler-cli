@@ -80,13 +80,19 @@ def save_images(images):
     with open("images/images.json", "w") as fp:
         json.dump(image_json, fp, indent=4)
 
+    downloaded_images = set()
     for image in images:
+        if image["url"] in downloaded_images:
+            # skip duplicate images
+            continue
         try:
             img_data = requests.get(image["url"]).content
             img_name = Path(image["url"]).name
-            with open(f"images/{img_name}", "wb") as fp:
-                fp.write(img_data)
-            print(f"Downloaded image {img_name}")
+            if img_name not in downloaded_images:
+                with open(f"images/{img_name}", "wb") as fp:
+                    fp.write(img_data)
+                print(f"Downloaded image {img_name}")
+                downloaded_images.add(image["url"])
         except requests.exceptions.RequestException as exc:
             print(f"Failed to download image {image['url']}: {exc}")
 
