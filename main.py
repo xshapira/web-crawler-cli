@@ -1,4 +1,5 @@
 import json
+import sys
 from pathlib import Path
 
 import requests
@@ -84,7 +85,15 @@ def save_images(images):
 
 
 def main() -> None:
-    pass
+    # ensure exactly two command-line arguments are provided (excluding the script name)
+    if len(sys.argv) != 3:
+        print("Usage: <script_name> <start_url> <depth>")
+        sys.exit(1)
+
+    start_url = sys.argv[1]
+    depth = int(sys.argv[2])
+    images = fetch_images_from_url(start_url, 1, depth)
+    save_images(images)
 
 
 if __name__ == "__main__":
