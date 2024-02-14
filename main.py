@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import requests
 from bs4 import BeautifulSoup
 
@@ -48,6 +51,30 @@ def fetch_images_from_url(url, current_depth, max_depth):
             )
 
     return images
+
+
+def save_images(images):
+    if not images:
+        print("No images to save.")
+        return
+
+    images_dir = Path("images")
+    if not images_dir.exists():
+        images_dir.mkdir()
+
+    image_json = {"images": images}
+    with open("images/images.json", "w") as fp:
+        json.dump(image_json, fp, indent=4)
+
+    for image in images:
+        try:
+            img_data = requests.get(image["url"]).content
+            img_name = Path(image["url"]).name
+            with open(f"images/{img_name}", "wb") as fp:
+                fp.write(img_data)
+            print(f"Downloaded image {img_name}")
+        except requests.exceptions.RequestException as exc:
+            print(f"Failed to download image {image['url']}: {exc}")
 
 
 def main() -> None:
