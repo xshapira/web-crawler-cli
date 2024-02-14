@@ -5,6 +5,10 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 
+from logger import setup_logger
+
+logger = setup_logger(__name__)
+
 # maximum number of images to download
 MAX_IMAGES = 10
 
@@ -29,12 +33,12 @@ def fetch_images_from_url(url, current_depth, max_depth):
     if current_depth > max_depth:
         return
 
-    print(f"Fetching images from {url} at depth {current_depth}")
+    logger.info(f"Fetching images from {url} at depth {current_depth}")
     try:
         response = requests.get(url)
         soup = BeautifulSoup(response.content, "html.parser")
     except requests.exceptions.RequestException as exc:
-        print(f"Failed to fetch images from {url}: {exc}")
+        logger.error(f"Failed to fetch images from {url}: {exc}")
         return
 
     collected_images = [
@@ -69,7 +73,7 @@ def save_images(images):
         images (list of dict): A list of dictionaries where each dictionary contains the 'url' key with the URL of the image to be downloaded and saved.
     """
     if not images:
-        print("No images to save.")
+        logger.info("No images to save.")
         return
 
     images_dir = Path("images")
@@ -91,16 +95,16 @@ def save_images(images):
             if img_name not in downloaded_images:
                 with open(f"images/{img_name}", "wb") as fp:
                     fp.write(img_data)
-                print(f"Downloaded image {img_name}")
+                logger.info(f"Downloaded image {img_name}")
                 downloaded_images.add(image["url"])
         except requests.exceptions.RequestException as exc:
-            print(f"Failed to download image {image['url']}: {exc}")
+            logger.error(f"Failed to download image {image['url']}: {exc}")
 
 
 def main() -> None:
     # ensure exactly two command-line arguments are provided (excluding the script name)
     if len(sys.argv) != 3:
-        print("Usage: <script_name> <start_url> <depth>")
+        logger.error("Usage: <script_name> <start_url> <depth>")
         sys.exit(1)
 
     start_url = sys.argv[1]
