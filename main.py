@@ -5,6 +5,9 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 
+# maximum number of images to download
+MAX_IMAGES = 10
+
 
 def fetch_images_from_url(url, current_depth, max_depth):
     """
@@ -34,7 +37,7 @@ def fetch_images_from_url(url, current_depth, max_depth):
         print(f"Failed to fetch images from {url}: {exc}")
         return
 
-    images = [
+    collected_images = [
         {
             "url": img["src"],
             "page": url,
@@ -43,6 +46,10 @@ def fetch_images_from_url(url, current_depth, max_depth):
         for img in soup.find_all("img")
         if "src" in img.attrs
     ]
+    # slicing the list makes sure we don't process more images than the limit
+    # set by `MAX_IMAGES`.
+    # note that it first collects all the matching images without considering the limit.
+    images = collected_images[:MAX_IMAGES]
     if current_depth < max_depth:
         links = [a["href"] for a in soup.find_all("a") if "href" in a.attrs]
         for link in links:
