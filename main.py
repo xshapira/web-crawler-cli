@@ -5,6 +5,9 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 
+# define the maximum number of images to download
+MAX_IMAGES = 10
+
 
 def fetch_images_from_url(url, current_depth, max_depth):
     """
@@ -27,29 +30,38 @@ def fetch_images_from_url(url, current_depth, max_depth):
         return
 
     print(f"Fetching images from {url} at depth {current_depth}")
+    images = []
+
     try:
         response = requests.get(url)
         soup = BeautifulSoup(response.content, "html.parser")
     except requests.exceptions.RequestException as exc:
         print(f"Failed to fetch images from {url}: {exc}")
-        return
+        return images
 
-    images = [
-        {
-            "url": img["src"],
-            "page": url,
-            "depth": current_depth,
-        }
-        for img in soup.find_all("img")
-        if "src" in img.attrs
-    ]
-    if current_depth < max_depth:
+    for img in soup.find_all("img"):
+        if len(images) < MAX_IMAGES and "src" in img.attrs:
+            images.append(
+                {
+                    "url": img["src"],
+                    "page": url,
+                    "depth": current_depth,
+                }
+            )
+        else:
+            # stop collecting images if MAX_IMAGES limit is reached
+            break
+
+    # proceed to fetch images from links if the depth allows and limit
+    # not reached
+    if current_depth < max_depth and len(images) < MAX_IMAGES:
         links = [a["href"] for a in soup.find_all("a") if "href" in a.attrs]
         for link in links:
-            images.extend(
-                # `current_depth` incremented by 1 indicating it's now one level deeper.
-                fetch_images_from_url(link, current_depth + 1, max_depth),
-            )
+            if len(images) > MAX_IMAGES:
+                # stop processing new links if MAX_IMAGES limit is reached
+                break
+            # `current_depth` incremented by 1 indicating it's now one level deeper.
+            images += fetch_images_from_url(link, current_depth + 1, max_depth)
 
     return images
 
