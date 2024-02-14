@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 import requests_mock
 
-from main import fetch_images_from_url, save_images
+from crawl import fetch_images_from_url, save_images
 
 
 @pytest.fixture
