@@ -13,7 +13,7 @@ logger = setup_logger(__name__)
 MAX_IMAGES = 10
 
 
-def fetch_images_from_url(url, current_depth, max_depth):
+def fetch_images_from_url(url: str, current_depth: int, max_depth: int) -> list[dict]:
     """
     Recursively fetch images from a given URL up to a specified depth.
 
@@ -31,7 +31,7 @@ def fetch_images_from_url(url, current_depth, max_depth):
     # stop crawling if the current depth exceeds the maximum depth
     # to prevent recursive calls
     if current_depth > max_depth:
-        return
+        return []
 
     logger.info(f"Fetching images from {url} at depth {current_depth}")
     try:
@@ -65,7 +65,7 @@ def fetch_images_from_url(url, current_depth, max_depth):
     return images
 
 
-def save_images(images):
+def save_images(images: list[dict]) -> None:
     """
     Saves images from a list of image URLs to a local directory and creates a JSON file listing the collected images.
 
