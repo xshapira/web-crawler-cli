@@ -39,7 +39,7 @@ def fetch_images_from_url(url, current_depth, max_depth):
         soup = BeautifulSoup(response.content, "html.parser")
     except requests.exceptions.RequestException as exc:
         logger.error(f"Failed to fetch images from {url}: {exc}")
-        return
+        return []
 
     collected_images = [
         {
