@@ -54,6 +54,12 @@ def fetch_images_from_url(url, current_depth, max_depth):
 
 
 def save_images(images):
+    """
+    Saves images from a list of image URLs to a local directory and creates a JSON file listing the collected images.
+
+    Args:
+        images (list of dict): A list of dictionaries where each dictionary contains the 'url' key with the URL of the image to be downloaded and saved.
+    """
     if not images:
         print("No images to save.")
         return
