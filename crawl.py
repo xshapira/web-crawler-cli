@@ -13,11 +13,69 @@ log = setup_logger(__name__)
 MAX_IMAGES = 10
 
 
+def fetch_html_content(url: str) -> BeautifulSoup | None:
+    """
+    Fetches HTML content for a given URL.
+
+    Args:
+        url (str): The starting URL from which to fetch images.
+
+    Returns:
+        BeautifulSoup object containing the parsed HTML content.
+    """
+    try:
+        response = requests.get(url)
+        soup = BeautifulSoup(response.content, "html.parser")
+    except requests.exceptions.RequestException as exc:
+        log.error(f"Failed to fetch images from {url}: {exc}")
+        return None
+    return soup
+
+
+def extract_image_urls(html_content: str, url: str, current_depth: int) -> list[dict]:
+    """
+    Parses HTML content to extract image URLs.
+
+    Args:
+        html_content (str): BeautifulSoup object containing the parsed HTML content.
+        url (str): The starting URL from which to fetch images.
+        current_depth (int): The current position in the link hierarchy
+
+    Returns:
+        A list of image metadata. Metadata includes the image URL, the page URL, and the depth.
+    """
+    collected_images = [
+        {
+            "url": img["src"],
+            "page": url,
+            "depth": current_depth,
+        }
+        for img in html_content.find_all("img")
+        if "src" in img.attrs
+    ]
+    # Slicing the list makes sure we don't process more images than the limit
+    # set by `MAX_IMAGES`.
+    # Note that it first collects all the matching images without considering the limit.
+    return collected_images[:MAX_IMAGES]
+
+
+def extract_links(html_content: str, url: str) -> list[str]:
+    """
+    Parses HTML content to extract links.
+
+    Args:
+        html_content (str): BeautifulSoup object containing the parsed HTML content.
+        url (str): The starting URL from which to fetch images.
+
+    Returns:
+        A list of URL strings from the href attributes of anchor tags.
+    """
+    return [a["href"] for a in html_content.find_all("a") if "href" in a.attrs]
+
+
 def fetch_images_from_url(url: str, current_depth: int, max_depth: int) -> list[dict]:
     """
-    Recursively fetch images from a given URL up to a specified depth.
-
-    It requests the content from the given URL, parses it to find all image sources, and then recursively follows all links found on the page to continue gathering images from those pages, up to the defined maximum depth.
+    Orchestrates the recursive fetching of images - recursively follows all links found on the page to continue aggregates images from those pages, up to the defined maximum depth.
 
     Args:
         url (str): The starting URL from which to fetch images.
@@ -34,33 +92,13 @@ def fetch_images_from_url(url: str, current_depth: int, max_depth: int) -> list[
         return []
 
     log.info(f"Fetching images from {url} at depth {current_depth}")
-    try:
-        response = requests.get(url)
-        soup = BeautifulSoup(response.content, "html.parser")
-    except requests.exceptions.RequestException as exc:
-        log.error(f"Failed to fetch images from {url}: {exc}")
-        return []
-
-    collected_images = [
-        {
-            "url": img["src"],
-            "page": url,
-            "depth": current_depth,
-        }
-        for img in soup.find_all("img")
-        if "src" in img.attrs
-    ]
-    # slicing the list makes sure we don't process more images than the limit
-    # set by `MAX_IMAGES`.
-    # note that it first collects all the matching images without considering the limit.
-    images = collected_images[:MAX_IMAGES]
+    html_content = fetch_html_content(url)
+    images = extract_image_urls(html_content, url, current_depth)
     if current_depth < max_depth:
-        links = [a["href"] for a in soup.find_all("a") if "href" in a.attrs]
+        links = extract_links(html_content, url)
         for link in links:
-            images.extend(
-                # `current_depth` incremented by 1 indicating it's now one level deeper.
-                fetch_images_from_url(link, current_depth + 1, max_depth),
-            )
+            # `current_depth` incremented by 1 indicating it's now one level deeper.
+            images += fetch_images_from_url(link, current_depth + 1, max_depth)
 
     return images
 
