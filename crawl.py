@@ -65,25 +65,28 @@ def fetch_images_from_url(url: str, current_depth: int, max_depth: int) -> list[
     return images
 
 
-def save_images(images: list[dict]) -> None:
+def save_image_metadata(images: list[dict]) -> None:
     """
-    Saves images from a list of image URLs to a local directory and creates a JSON file listing the collected images.
+    Saves image metadata to a JSON file.
+    """
 
-    Args:
-        images (list of dict): A list of dictionaries where each dictionary contains the 'url' key with the URL of the image to be downloaded and saved.
-    """
     if not images:
         logger.info("No images to save.")
         return
 
     images_dir = Path("images")
-    if not images_dir.exists():
-        images_dir.mkdir()
-
+    # don't raise an error if directory already exists
+    images_dir.mkdir(exist_ok=True)
     image_json = {"images": images}
-    with open("images/images.json", "w") as fp:
+    with open(images_dir / "images.json", "w") as fp:
         json.dump(image_json, fp, indent=4)
 
+
+def save_images_locally(images: list[dict]) -> None:
+    """
+    Downloads and saves images from URLs to disk.
+    """
+    # tracks downloaded images to avoid duplicates
     downloaded_images = set()
     for image in images:
         if image["url"] in downloaded_images:
@@ -92,11 +95,10 @@ def save_images(images: list[dict]) -> None:
         try:
             img_data = requests.get(image["url"]).content
             img_name = Path(image["url"]).name
-            if img_name not in downloaded_images:
-                with open(f"images/{img_name}", "wb") as fp:
-                    fp.write(img_data)
-                logger.info(f"Downloaded image {img_name}")
-                downloaded_images.add(image["url"])
+            with open(f"images/{img_name}", "wb") as fp:
+                fp.write(img_data)
+            logger.info(f"Downloaded image {img_name}")
+            downloaded_images.add(image["url"])
         except requests.exceptions.RequestException as exc:
             logger.error(f"Failed to download image {image['url']}: {exc}")
 
@@ -110,7 +112,8 @@ def main() -> None:
     start_url = sys.argv[1]
     depth = int(sys.argv[2])
     images = fetch_images_from_url(start_url, 1, depth)
-    save_images(images)
+    save_image_metadata(images)
+    save_images_locally(images)
 
 
 if __name__ == "__main__":
