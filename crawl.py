@@ -104,7 +104,7 @@ def save_images_locally(images: list[dict]) -> None:
 
 
 def main() -> None:
-    # ensure exactly two command-line arguments are provided (excluding the script name)
+    # check if only two command-line arguments are provided (excluding the script name)
     if len(sys.argv) != 3:
         log.error("Usage: <script_name> <start_url> <depth>")
         sys.exit(1)
