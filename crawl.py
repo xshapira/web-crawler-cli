@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup
 
 from logger import setup_logger
 
-logger = setup_logger(__name__)
+log = setup_logger(__name__)
 
 # maximum number of images to download
 MAX_IMAGES = 10
@@ -33,12 +33,12 @@ def fetch_images_from_url(url: str, current_depth: int, max_depth: int) -> list[
     if current_depth > max_depth:
         return []
 
-    logger.info(f"Fetching images from {url} at depth {current_depth}")
+    log.info(f"Fetching images from {url} at depth {current_depth}")
     try:
         response = requests.get(url)
         soup = BeautifulSoup(response.content, "html.parser")
     except requests.exceptions.RequestException as exc:
-        logger.error(f"Failed to fetch images from {url}: {exc}")
+        log.error(f"Failed to fetch images from {url}: {exc}")
         return []
 
     collected_images = [
@@ -71,7 +71,7 @@ def save_image_metadata(images: list[dict]) -> None:
     """
 
     if not images:
-        logger.info("No images to save.")
+        log.info("No images to save.")
         return
 
     images_dir = Path("images")
@@ -97,16 +97,16 @@ def save_images_locally(images: list[dict]) -> None:
             img_name = Path(image["url"]).name
             with open(f"images/{img_name}", "wb") as fp:
                 fp.write(img_data)
-            logger.info(f"Downloaded image {img_name}")
+            log.info(f"Downloaded image {img_name}")
             downloaded_images.add(image["url"])
         except requests.exceptions.RequestException as exc:
-            logger.error(f"Failed to download image {image['url']}: {exc}")
+            log.error(f"Failed to download image {image['url']}: {exc}")
 
 
 def main() -> None:
     # ensure exactly two command-line arguments are provided (excluding the script name)
     if len(sys.argv) != 3:
-        logger.error("Usage: <script_name> <start_url> <depth>")
+        log.error("Usage: <script_name> <start_url> <depth>")
         sys.exit(1)
 
     start_url = sys.argv[1]
