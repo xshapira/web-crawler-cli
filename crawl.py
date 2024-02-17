@@ -103,7 +103,7 @@ def fetch_images_from_url(url: str, current_depth: int, max_depth: int) -> list[
     return images
 
 
-def save_image_metadata(images: list[dict]) -> None:
+def save_images_metadata(images: list[dict]) -> None:
     """
     Saves image metadata to a JSON file.
 
@@ -156,7 +156,7 @@ def main() -> None:
     start_url = sys.argv[1]
     depth = int(sys.argv[2])
     images = fetch_images_from_url(start_url, 1, depth)
-    save_image_metadata(images)
+    save_images_metadata(images)
     save_images_locally(images)
 
 
