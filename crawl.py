@@ -106,6 +106,9 @@ def fetch_images_from_url(url: str, current_depth: int, max_depth: int) -> list[
 def save_image_metadata(images: list[dict]) -> None:
     """
     Saves image metadata to a JSON file.
+
+    Args:
+        images (list of dict): A list of dictionaries where each dictionary contains the 'url' key with the URL of the image to be downloaded and saved.
     """
 
     if not images:
@@ -123,6 +126,9 @@ def save_image_metadata(images: list[dict]) -> None:
 def save_images_locally(images: list[dict]) -> None:
     """
     Downloads and saves images from URLs to disk.
+
+    Args:
+        images (list of dict): A list of dictionaries where each dictionary contains the 'url' key with the URL of the image to be downloaded and saved. The 'url' is used to determine the source of the image and the filename under which the image is saved locally.
     """
     # tracks downloaded images to avoid duplicates
     downloaded_images = set()
