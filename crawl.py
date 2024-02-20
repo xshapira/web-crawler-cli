@@ -189,7 +189,7 @@ def save_images_locally(images: list[dict]) -> None:
             continue
         try:
             if is_based64_encoded(image["url"]):
-                log.info("Found Base64-encoded data")
+                log.error("Found Base64-encoded data.")
                 continue
             image_data = requests.get(image["url"], stream=True)
             image_name = extract_filename_from_url(image["url"])
