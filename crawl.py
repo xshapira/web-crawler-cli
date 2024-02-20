@@ -32,7 +32,9 @@ def fetch_html_content(url: str) -> BeautifulSoup | None:
     return soup
 
 
-def extract_image_urls(html_content: str, url: str, current_depth: int) -> list[dict]:
+def extract_image_urls(
+    html_content: BeautifulSoup, url: str, current_depth: int
+) -> list[dict]:
     """
     Parses HTML content to extract image URLs.
 
@@ -59,7 +61,7 @@ def extract_image_urls(html_content: str, url: str, current_depth: int) -> list[
     return collected_images[:MAX_IMAGES]
 
 
-def extract_links(html_content: str, url: str) -> list[str]:
+def extract_links(html_content: BeautifulSoup, url: str) -> list[str]:
     """
     Parses HTML content to extract links.
 
