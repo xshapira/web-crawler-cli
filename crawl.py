@@ -1,3 +1,4 @@
+import contextlib
 import json
 import shutil
 import sys
@@ -110,7 +111,7 @@ def fetch_images_from_url(url: str, current_depth: int, max_depth: int) -> list[
 
 def extract_filename_from_url(url: str) -> str:
     """
-    Extract the filename from a URL, ignoring query parameters.
+    Extracts the filename from a URL, ignoring query parameters.
 
     Args:
         url (str): The URL from which to extract the filename.
@@ -122,6 +123,33 @@ def extract_filename_from_url(url: str) -> str:
     path = parsed_url.path
     # use Path to get the last component of the path as filename
     return Path(path).name
+
+
+def is_based64_encoded(text: str) -> bool:
+    """
+    Checks if the given string is a based64 encoded data URI.
+
+    Args:
+        text (str): The string to be checked.
+
+    Returns:
+        bool: True if the string is a Base64-encoded data URI for an image; False otherwise.
+
+    """
+    with contextlib.suppress(AttributeError):
+        if text.startswith("data:image") and ";base64" in text:
+            return True
+    return False
+
+
+# def save_image_from_base64(data_uri, filepath):
+#     """
+#     Save an image from a base64 data URI to a file.
+#     """
+#     _, encoded = data_uri.split(",", 1)
+#     data = base64.b64code(encoded)
+#     with open(filepath, "wb") as fp:
+#         fp.write(data)
 
 
 def save_images_metadata(images: list[dict]) -> None:
@@ -160,6 +188,9 @@ def save_images_locally(images: list[dict]) -> None:
             # skip duplicate images
             continue
         try:
+            if is_based64_encoded(image["url"]):
+                log.info("Found Base64-encoded data")
+                continue
             image_data = requests.get(image["url"], stream=True)
             image_name = extract_filename_from_url(image["url"])
             with open(f"images/{image_name}", "wb") as fp:
