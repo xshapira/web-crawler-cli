@@ -119,14 +119,12 @@ def save_images_metadata(images: list[dict]) -> None:
     images_dir = Path("images")
     if images_dir.exists():
         shutil.rmtree(images_dir)
+    # don't raise an error if directory already exists
     images_dir.mkdir(exist_ok=True)
 
     if not images:
         log.info("No images to save.")
         return
-
-    # don't raise an error if directory already exists
-    # if images_dir.exists():
 
     image_json = {"images": images}
     with open(images_dir / "images.json", "w") as fp:
