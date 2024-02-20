@@ -1,9 +1,8 @@
 import json
-import mimetypes
 import shutil
 import sys
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -109,6 +108,22 @@ def fetch_images_from_url(url: str, current_depth: int, max_depth: int) -> list[
     return images
 
 
+def extract_filename_from_url(url: str) -> str:
+    """
+    Extract the filename from a URL, ignoring query parameters.
+
+    Args:
+        url (str): The URL from which to extract the filename.
+
+    Returns:
+        str: The filename with its extension, without query parameters.
+    """
+    parsed_url = urlparse(url)
+    path = parsed_url.path
+    # use Path to get the last component of the path as filename
+    return Path(path).name
+
+
 def save_images_metadata(images: list[dict]) -> None:
     """
     Saves image metadata to a JSON file.
@@ -126,9 +141,9 @@ def save_images_metadata(images: list[dict]) -> None:
         log.info("No images to save.")
         return
 
-    image_json = {"images": images}
+    metadata = {"images": images}
     with open(images_dir / "images.json", "w") as fp:
-        json.dump(image_json, fp, indent=4)
+        json.dump(metadata, fp, indent=4)
 
 
 def save_images_locally(images: list[dict]) -> None:
@@ -145,15 +160,11 @@ def save_images_locally(images: list[dict]) -> None:
             # skip duplicate images
             continue
         try:
-            img_data = requests.get(image["url"])
-            content_type = img_data.headers.get("Content-Type")
-            extension = mimetypes.guess_extension(content_type)
-            img_name = Path(image["url"]).name
-            img_without_ext = img_name.rsplit(".", 1)[0]
-            image_name = f"{img_without_ext}{extension}"
+            image_data = requests.get(image["url"], stream=True)
+            image_name = extract_filename_from_url(image["url"])
             with open(f"images/{image_name}", "wb") as fp:
-                fp.write(img_data.content)
-            log.info(f"Downloaded image {img_name}")
+                fp.write(image_data.content)
+            log.info(f"Downloaded image {image_name}")
             downloaded_images.add(image["url"])
         except requests.exceptions.RequestException as exc:
             log.error(f"Failed to download image {image['url']}: {exc}")
