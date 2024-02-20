@@ -1,6 +1,9 @@
 import json
+import mimetypes
+import shutil
 import sys
 from pathlib import Path
+from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
@@ -48,7 +51,7 @@ def extract_image_urls(
     """
     collected_images = [
         {
-            "url": img["src"],
+            "url": urljoin(url, img["src"]),
             "page": url,
             "depth": current_depth,
         }
@@ -100,7 +103,8 @@ def fetch_images_from_url(url: str, current_depth: int, max_depth: int) -> list[
         links = extract_links(html_content, url)
         for link in links:
             # `current_depth` incremented by 1 indicating it's now one level deeper.
-            images += fetch_images_from_url(link, current_depth + 1, max_depth)
+            page_url = urljoin(url, link)
+            images += fetch_images_from_url(page_url, current_depth + 1, max_depth)
 
     return images
 
@@ -112,14 +116,18 @@ def save_images_metadata(images: list[dict]) -> None:
     Args:
         images (list of dict): A list of dictionaries where each dictionary contains the 'url' key with the URL of the image to be downloaded and saved.
     """
+    images_dir = Path("images")
+    if images_dir.exists():
+        shutil.rmtree(images_dir)
+    images_dir.mkdir(exist_ok=True)
 
     if not images:
         log.info("No images to save.")
         return
 
-    images_dir = Path("images")
     # don't raise an error if directory already exists
-    images_dir.mkdir(exist_ok=True)
+    # if images_dir.exists():
+
     image_json = {"images": images}
     with open(images_dir / "images.json", "w") as fp:
         json.dump(image_json, fp, indent=4)
@@ -139,10 +147,14 @@ def save_images_locally(images: list[dict]) -> None:
             # skip duplicate images
             continue
         try:
-            img_data = requests.get(image["url"]).content
+            img_data = requests.get(image["url"])
+            content_type = img_data.headers.get("Content-Type")
+            extension = mimetypes.guess_extension(content_type)
             img_name = Path(image["url"]).name
-            with open(f"images/{img_name}", "wb") as fp:
-                fp.write(img_data)
+            img_without_ext = img_name.rsplit(".", 1)[0]
+            image_name = f"{img_without_ext}{extension}"
+            with open(f"images/{image_name}", "wb") as fp:
+                fp.write(img_data.content)
             log.info(f"Downloaded image {img_name}")
             downloaded_images.add(image["url"])
         except requests.exceptions.RequestException as exc:
