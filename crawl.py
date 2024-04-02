@@ -2,6 +2,7 @@ import contextlib
 import json
 import shutil
 import sys
+from collections import deque
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
@@ -91,20 +92,26 @@ def fetch_images_from_url(url: str, current_depth: int, max_depth: int) -> list[
         A list of dictionaries, each containing the 'url' of an image, the 'page' on which the image was found, and the 'depth' at which the image was found. Returns an empty list if no images are found or in case of a request failure.
     """
 
-    # stop crawling if the current depth exceeds the maximum depth
-    # to prevent recursive calls
-    if current_depth > max_depth:
-        return []
+    images = []
+    queue = deque([(url, 0)])
 
-    log.info(f"Fetching images from {url} at depth {current_depth}")
-    html_content = fetch_html_content(url)
-    images = extract_image_urls(html_content, url, current_depth)
-    if current_depth < max_depth:
-        links = extract_links(html_content, url)
-        for link in links:
-            # `current_depth` incremented by 1 indicating it's now one level deeper.
-            page_url = urljoin(url, link)
-            images += fetch_images_from_url(page_url, current_depth + 1, max_depth)
+    while queue:
+        current_url, current_depth = queue.popleft()
+
+        # Stop crawling if current depth exceeds maximum depth
+        if current_depth > max_depth:
+            continue
+
+        log.info(f"Fetching images from {current_url} at depth {current_depth}")
+        html_content = fetch_html_content(current_url)
+        images.extend(extract_image_urls(html_content, current_url, current_depth))
+
+        if current_depth < max_depth:
+            links = extract_links(html_content, current_url)
+            for link in links:
+                page_url = urljoin(current_url, link)
+                # `current_depth` incremented by 1 indicating it's now one level deeper.
+                queue.append((page_url, current_depth + 1))
 
     return images
 
