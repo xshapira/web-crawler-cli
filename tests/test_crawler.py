@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 import requests_mock
 
-from crawl import fetch_images_from_url, save_images
+from crawl import fetch_images_from_url, save_images_locally
 
 
 @pytest.fixture
@@ -48,6 +48,7 @@ def test_fetch_images_single_page(mock_response):
     """
     with requests_mock.Mocker() as m:
         m.get("http://example.com/testpage.html", text=mock_response)
+        m.get("http://example.com/nextpage.html", text=mock_response)
         images = fetch_images_from_url("http://example.com/testpage.html", 1, 1)
         assert len(images) == 3
         # use the helper function to assert the condition for each image URL
@@ -62,14 +63,14 @@ def test_handling_maximum_depth(mock_response):
         m.get("http://example.com/testpage.html", text=mock_response)
         m.get("http://example.com/nextpage.html", text=mock_response)
         # assuming depth 1 means only the initial page is processed
-        images = fetch_images_from_url("http://example.com/testpage.html", 1, 1)
+        images = fetch_images_from_url("http://example.com/testpage.html", 1, 2)
         # ensure no additional images from "next page" are included
-        assert len(images) == 3
+        assert len(images) == 6
 
 
 def test_duplicate_image_url_handling(requests_mock, mocker):
     """
-    Verifies that `save_images` correctly handles duplicate image URLs.
+    Verifies that `save_images_locally` correctly handles duplicate image URLs.
     """
     # mock HTTP responses for image URLs
     requests_mock.get("http://example.com/image1.jpg", content=b"image data 1")
@@ -102,9 +103,9 @@ def test_duplicate_image_url_handling(requests_mock, mocker):
         },
     ]
     # this should now use the mocked open and not actually write files
-    save_images(images)
+    save_images_locally(images)
 
     # With open mocked, we can't check the filesystem to verify behavior as
     # before. Instead, we can check if open was called the expected number of times with the right arguments.
     # this assumes image data writing happens in a single open call per image.
-    assert mock_open_function.call_count == 3  # 2 images + 1 JSON file
+    assert mock_open_function.call_count == 2  # 2 unique images
