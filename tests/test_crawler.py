@@ -1,9 +1,10 @@
+import json
 from pathlib import Path
 
 import pytest
 import requests_mock
 
-from crawl import fetch_images_from_url, save_images_locally
+from crawl import fetch_images_from_url, save_images_locally, save_images_metadata
 
 
 @pytest.fixture
@@ -109,3 +110,45 @@ def test_duplicate_image_url_handling(requests_mock, mocker):
     # before. Instead, we can check if open was called the expected number of times with the right arguments.
     # this assumes image data writing happens in a single open call per image.
     assert mock_open_function.call_count == 2  # 2 unique images
+
+
+def test_save_images_metadata(mocker, cleanup_images_dir):
+    """
+    Verifies that `save_images_metadata` correctly saves image metadata to a JSON file.
+    """
+    # mock filesystem interactions
+    # assume directory doesn't exist
+    mocker.patch("pathlib.Path.exists", return_value=False)
+    # mock mkdir to do nothing
+    mocker.patch("pathlib.Path.mkdir")
+
+    # mock open
+    mock_open = mocker.mock_open()
+    mocker.patch("builtins.open", mock_open)
+
+    # mock json.dump
+    mock_json_dump = mocker.patch.object(json, "dump")
+
+    images = [
+        {
+            "url": "http://example.com/image1.jpg",
+            "page": "http://example.com",
+            "depth": 1,
+        },
+        {
+            "url": "http://example.com/image2.jpg",
+            "page": "http://example.com",
+            "depth": 1,
+        },
+    ]
+    save_images_metadata(images)
+
+    # Check if open was called with the correct arguments
+    expected_path = Path("images/images.json")
+    mock_open.assert_called_once_with(expected_path, "w")
+
+    # Check if json.dump was called with the correct arguments
+    expected_data = {"images": images}
+    mock_json_dump.assert_called_once_with(
+        expected_data, mock_open.return_value, indent=4
+    )
