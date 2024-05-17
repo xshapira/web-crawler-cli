@@ -81,37 +81,46 @@ def extract_links(html_content: BeautifulSoup, url: str) -> list[str]:
 
 def fetch_images_from_url(url: str, current_depth: int, max_depth: int) -> list[dict]:
     """
-    Orchestrates the recursive fetching of images - recursively follows all links found on the page to continue aggregates images from those pages, up to the defined maximum depth.
+    Fetch images from a URL and its linked pages up to a specified depth using the BFS algorithm. While traversing the pages, extract images from the current page regardless of depth, but only follows links within the specified depth.
 
     Args:
         url (str): The starting URL from which to fetch images.
-        current_depth (int): The current position in the link hierarchy
-        max_depth (int): The maximum number of links to follow from the initial page.
+        current_depth (int): The current depth of the URL being processed.
+        max_depth (int): The maximum depth to crawl from the starting URL.
 
     Returns:
-        A list of dictionaries, each containing the 'url' of an image, the 'page' on which the image was found, and the 'depth' at which the image was found. Returns an empty list if no images are found or in case of a request failure.
+        A list of dictionaries, each containing the following keys:
+        - 'url': The URL of the image.
+        - 'page': The URL of the page where the image was found.
+        - 'depth': The depth at which the image was found relative to the starting URL.
+
+        Returns an empty list if no images are found or in case of a request failure.
     """
 
     images = []
-    queue = deque([(url, 0)])
+    visited_urls = set()
+    queue = deque([(url, current_depth)])
 
     while queue:
         current_url, current_depth = queue.popleft()
-
-        # Stop crawling if current depth exceeds maximum depth
-        if current_depth > max_depth:
+        # Skip processing if the URL has already been visited
+        if current_url in visited_urls:
             continue
+        visited_urls.add(current_url)
 
         log.info(f"Fetching images from {current_url} at depth {current_depth}")
         html_content = fetch_html_content(current_url)
         images.extend(extract_image_urls(html_content, current_url, current_depth))
 
-        if current_depth < max_depth:
-            links = extract_links(html_content, current_url)
-            for link in links:
-                page_url = urljoin(current_url, link)
-                # `current_depth` incremented by 1 indicating it's now one level deeper.
-                queue.append((page_url, current_depth + 1))
+        # Stop crawling if current depth reaches maximum depth
+        if current_depth == max_depth:
+            continue
+        links = extract_links(html_content, current_url)
+        for link in links:
+            page_url = urljoin(current_url, link)
+            # `current_depth` incremented by 1
+            # indicating it's now one level deeper.
+            queue.append((page_url, current_depth + 1))
 
     return images
 
@@ -214,9 +223,8 @@ def main() -> None:
         log.error("Usage: <script_name> <start_url> <depth>")
         sys.exit(1)
 
-    start_url = sys.argv[1]
-    depth = int(sys.argv[2])
-    images = fetch_images_from_url(start_url, 1, depth)
+    _, start_url, depth = sys.argv
+    images = fetch_images_from_url(start_url, 1, int(depth))
     save_images_metadata(images)
     save_images_locally(images)
 
