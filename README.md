@@ -85,4 +85,4 @@ pytest -vv
 We use two key parameters to control how deep we go into a website to download images:
 
 - `max_depth`: Determines how far we can go from the starting page to find images. If `max_depth` is set to 1, we will only download images from the starting page. If it is set to 2, we will also download images from any page directly linked to it, and so on.
-- `current_depth`: Keeps track of how deep we are within the website's structure. It begins at 1 on the starting page and increases as we click on links to other pages.
+- `current_depth`: Keeps track of how deep we are within the website's structure. It begins at 1 on the starting page and increases as we extract links from the HTML content and add them to the queue.
