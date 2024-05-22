@@ -1,8 +1,8 @@
+import argparse
 import contextlib
 import hashlib
 import json
 import shutil
-import sys
 from collections import deque
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
@@ -235,13 +235,18 @@ def save_images_locally(images: list[dict]) -> None:
 
 
 def main() -> None:
-    # check if only two command-line arguments are provided (excluding the script name)
-    if len(sys.argv) != 3:
-        log.error("Usage: <script_name> <start_url> <depth>")
-        sys.exit(1)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("start_url", help="The starting URL for crawling")
+    parser.add_argument(
+        "depth",
+        nargs="?",
+        type=int,
+        default=1,
+        help="The depth of crawling (default: 1)",
+    )
+    args = parser.parse_args()
 
-    _, start_url, depth = sys.argv
-    images = fetch_images_from_url(start_url, 1, int(depth))
+    images = fetch_images_from_url(args.start_url, 1, args.depth)
     save_images_metadata(images)
     save_images_locally(images)
 
