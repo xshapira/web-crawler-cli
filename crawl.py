@@ -112,6 +112,8 @@ def fetch_images_from_url(url: str, current_depth: int, max_depth: int) -> list[
 
         Returns an empty list if no images are found or in case of a request failure.
     """
+    if max_depth <= 0:
+        return []
 
     images = []
     visited_urls_hashes = set()
