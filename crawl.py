@@ -224,12 +224,12 @@ def save_images_locally(images: list[dict]) -> None:
             if is_based64_encoded(image["url"]):
                 log.error("Found Base64-encoded data.")
                 continue
-            image_data = requests.get(image["url"], stream=True)
-            image_name = extract_filename_from_url(image["url"])
-            with open(f"images/{image_name}", "wb") as fp:
-                fp.write(image_data.content)
-            log.info(f"Downloaded image {image_name}")
-            downloaded_images.add(image["url"])
+            with requests.get(image["url"], stream=True) as image_data:
+                image_name = extract_filename_from_url(image["url"])
+                with open(f"images/{image_name}", "wb") as fp:
+                    fp.write(image_data.content)
+                log.info(f"Downloaded image {image_name}")
+                downloaded_images.add(image["url"])
         except requests.exceptions.RequestException as exc:
             log.error(f"Failed to download image {image['url']}: {exc}")
 
