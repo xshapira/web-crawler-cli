@@ -1,4 +1,5 @@
 import contextlib
+import hashlib
 import json
 import shutil
 import sys
@@ -79,6 +80,21 @@ def extract_links(html_content: BeautifulSoup, url: str) -> list[str]:
     return [a["href"] for a in html_content.find_all("a") if "href" in a.attrs]
 
 
+def hash_url(url: str) -> int:
+    """
+    Compute the SHA-256 hash of a URL and return it as an integer.
+
+    Hashing the URL allows for efficient storage and comparison in the `visited_urls` set by reducing memory usage compared to storing full URL strings.
+
+    Args:
+        url (str): The URL string to be hashed.
+
+    Returns:
+        int: The integer representation of the SHA-256 hash of the URL.
+    """
+    return int(hashlib.sha256(url.encode()).hexdigest(), 16)
+
+
 def fetch_images_from_url(url: str, current_depth: int, max_depth: int) -> list[dict]:
     """
     Fetch images from a URL and its linked pages up to a specified depth using the BFS algorithm. While traversing the pages, extract images from the current page regardless of depth, but only follows links within the specified depth.
@@ -98,15 +114,16 @@ def fetch_images_from_url(url: str, current_depth: int, max_depth: int) -> list[
     """
 
     images = []
-    visited_urls = set()
+    visited_urls_hashes = set()
     queue = deque([(url, current_depth)])
 
     while queue:
         current_url, current_depth = queue.popleft()
+        current_url_hash = hash_url(current_url)
         # Skip processing if the URL has already been visited
-        if current_url in visited_urls:
+        if current_url_hash in visited_urls_hashes:
             continue
-        visited_urls.add(current_url)
+        visited_urls_hashes.add(current_url_hash)
 
         log.info(f"Fetching images from {current_url} at depth {current_depth}")
         html_content = fetch_html_content(current_url)
