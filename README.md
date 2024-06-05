@@ -1,6 +1,6 @@
 # Web Crawler CLI
 
-Recursively crawl a website and download images up to a specified depth.
+Crawl a website and download images up to a specified depth.
 
 ## Usage
 
