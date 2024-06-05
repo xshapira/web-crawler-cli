@@ -1,5 +1,6 @@
 import argparse
 import contextlib
+import functools
 import hashlib
 import json
 import shutil
@@ -18,6 +19,7 @@ log = setup_logger(__name__)
 MAX_IMAGES = 10
 
 
+@functools.lru_cache(maxsize=500)
 def fetch_html_content(url: str) -> BeautifulSoup | None:
     """
     Fetches HTML content for a given URL.
