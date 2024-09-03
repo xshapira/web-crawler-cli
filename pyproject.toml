@@ -1,44 +1,32 @@
-[tool.poetry]
-name = "Web Crawler CLI"
+[project]
+name = "web-crawler-cli"
 version = "0.0.2"
 description = ""
-authors = ["Max Shapira <max@winoutt.com>"]
-package-mode = false
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["beautifulsoup4>=4.12.3", "requests>=2.32.3"]
 
-[tool.poetry.dependencies]
-python = "^3.11"
-requests = "^2.31.0"
-beautifulsoup4 = "^4.12.3"
+[tool.uv]
+dev-dependencies = [
+  "ruff>=0.6.3",
+  "basedpyright>=1.17.1",
+  "pre-commit>=3.6.1",
+  "pytest>=8.0.0",
+  "pytest-sugar>=1.0.0",
+  "requests-mock>=1.11.0",
+  "pytest-mock>=3.12.0",
+  "pysnooper>=1.2.0",
+]
 
-[tool.poetry.group.dev.dependencies]
-ruff = "^0.3.5"
-mypy = "^1.8.0"
-pre-commit = "^3.6.1"
-pytest = "^8.0.0"
-pytest-sugar = "^1.0.0"
-requests-mock = "^1.11.0"
-pytest-mock = "^3.12.0"
-pysnooper = "^1.2.0"
-
-[tool.mypy]
-disallow_untyped_defs = true
-disallow_any_unimported = true
-no_implicit_optional = true
-strict_equality = true
-warn_unused_ignores = true
-warn_redundant_casts = true
-warn_return_any = true
-check_untyped_defs = true
-show_error_codes = true
-
-[[tool.mypy.overrides]]
-module = ['tests.*']
-disallow_untyped_defs = false
-strict_equality = false
+[tool.basedpyright]
+typeCheckingMode = "all"
 
 [tool.ruff]
 line-length = 88
 exclude = ['.git', '__pycache__', '__init__.py', '.mypy_cache', '.pytest_cache']
+extend-include = ["*.ipynb"]
+
+[tool.ruff.lint]
 select = [
   "E",  # pycodestyle errors
   "W",  # pycodestyle warnings
@@ -55,12 +43,7 @@ ignore = [
   "E402",
 ]
 unfixable = ["F841"]
-extend-include = ["*.ipynb"]
 
-[tool.ruff.pyupgrade]
+[tool.ruff.lint.pyupgrade]
 # Preserve types, even if a file imports `from __future__ import annotations`.
 keep-runtime-typing = true
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
