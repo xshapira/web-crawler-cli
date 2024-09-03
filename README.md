@@ -5,9 +5,7 @@ Crawl a website and download images up to a specified depth.
 ## Usage
 
 ```bash
-poetry install
-poetry run python crawl.py <start_url> <depth>
-
+uv run python crawl.py <start_url> <depth>
 ```
 
 - `start_url` - The URL to start crawling from
@@ -16,7 +14,7 @@ poetry run python crawl.py <start_url> <depth>
 For example:
 
 ```bash
-poetry run python crawl.py "https://www.langchain.com" 1
+uv run crawl.py "https://www.langchain.com" 1
 ```
 
 This will start crawling from <https://www.langchain.com>, following links up to a depth of 1 page, and downloading any images found along the way.
@@ -77,7 +75,7 @@ It also saves all images to the `images/` directory, named by their URL filename
 To run the included tests:
 
 ```bash
-pytest -vv
+uv run pytest -vv
 ```
 
 ## How `max_depth` and `current_depth` work in image downloading
