@@ -18,9 +18,6 @@ dev-dependencies = [
   "pysnooper>=1.2.0",
 ]
 
-[tool.basedpyright]
-typeCheckingMode = "all"
-
 [tool.ruff]
 line-length = 88
 exclude = ['.git', '__pycache__', '__init__.py', '.mypy_cache', '.pytest_cache']

@@ -1,5 +1,4 @@
 import argparse
-import contextlib
 import functools
 import hashlib
 import json
@@ -15,8 +14,76 @@ from logger import setup_logger
 
 log = setup_logger(__name__)
 
-# maximum number of images to download
-MAX_IMAGES = 10
+# maximum number of PDFs to download
+MAX_PDFS = 50
+
+
+def get_domain(url: str) -> str:
+    """
+    Extract the domain from a URL.
+
+    Args:
+        url (str): The URL to extract domain from
+
+    Returns:
+        str: The domain (netloc) from the URL
+    """
+    parsed = urlparse(url)
+    return parsed.netloc.lower()
+
+
+def is_same_domain(url: str, base_domain: str) -> bool:
+    """
+    Check if a URL belongs to the same domain as the base domain.
+
+    Args:
+        url (str): The URL to check
+        base_domain (str): The base domain to compare against
+
+    Returns:
+        bool: True if the URL belongs to the same domain
+    """
+    url_domain = get_domain(url)
+    return url_domain == base_domain
+
+
+def is_valid_url(url: str) -> bool:
+    """
+    Check if a URL is valid for crawling (not JavaScript, mailto, etc.)
+
+    Args:
+        url (str): The URL to validate
+
+    Returns:
+        bool: True if the URL is valid for crawling
+    """
+    if not url:
+        return False
+
+    # Skip JavaScript URLs, mailto links, tel links, etc.
+    invalid_schemes = ["javascript:", "mailto:", "tel:", "ftp:", "file:"]
+    if any(url.lower().startswith(scheme) for scheme in invalid_schemes):
+        return False
+
+    # Skip anchor-only links that don't change the page
+    return not url.startswith("#")
+
+
+def is_pdf_url(url: str) -> bool:
+    """
+    Check if a URL points to a PDF file
+
+    Args:
+        url (str): The URL to check
+
+    Returns:
+        bool: True if the URL appears to point to a PDF
+    """
+    return (
+        url.lower().endswith(".pdf")
+        or "pdf" in url.lower().split("/")[-1]
+        or "/pdf/" in url.lower()
+    )
 
 
 @functools.lru_cache(maxsize=500)
@@ -25,61 +92,112 @@ def fetch_html_content(url: str) -> BeautifulSoup | None:
     Fetches HTML content for a given URL.
 
     Args:
-        url (str): The starting URL from which to fetch images.
+        url (str): The starting URL from which to fetch content.
 
     Returns:
         BeautifulSoup object containing the parsed HTML content.
     """
+    if not is_valid_url(url):
+        log.debug(f"Skipping invalid URL: {url}")
+        return None
+
+    # Don't try to parse PDF files as HTML
+    if is_pdf_url(url):
+        log.debug(f"Skipping PDF URL for HTML parsing: {url}")
+        return None
+
     try:
-        response = requests.get(url)
-        soup = BeautifulSoup(response.content, "html.parser")
-    except requests.exceptions.RequestException as exc:
-        log.error(f"Failed to fetch images from {url}: {exc}")
+        # Add timeout and better headers
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+        }
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+
+        # Check content type before parsing
+        content_type = response.headers.get("content-type", "").lower()
+        if "text/html" not in content_type and "application/xhtml" not in content_type:
+            log.debug(
+                f"Skipping non-HTML content: {url} (content-type: {content_type})"
+            )
+            return None
+
+        # Use lxml parser if available, fallback to html.parser
+        try:
+            soup = BeautifulSoup(response.content, "lxml")
+        except Exception:
+            soup = BeautifulSoup(response.content, "html.parser")
+
+    except requests.RequestException as exc:
+        log.debug(f"Failed to fetch content from {url}: {exc}")
+        return None
+    except Exception as exc:
+        log.debug(f"Error parsing content from {url}: {exc}")
         return None
     return soup
 
 
-def extract_image_urls(
+def extract_pdf_urls(
     html_content: BeautifulSoup, url: str, current_depth: int
 ) -> list[dict]:
     """
-    Parses HTML content to extract image URLs.
+    Parses HTML content to extract PDF URLs.
 
     Args:
-        html_content (str): BeautifulSoup object containing the parsed HTML content.
-        url (str): The starting URL from which to fetch images.
+        html_content: BeautifulSoup object containing the parsed HTML content.
+        url (str): The starting URL from which to fetch PDFs.
         current_depth (int): The current position in the link hierarchy
 
     Returns:
-        A list of image metadata. Metadata includes the image URL, the page URL, and the depth.
+        A list of PDF metadata. Metadata includes the PDF URL, the page URL, and the depth.
     """
-    collected_images = [
-        {
-            "url": urljoin(url, img["src"]),
-            "page": url,
-            "depth": current_depth,
-        }
-        for img in html_content.find_all("img")
-        if "src" in img.attrs
-    ]
-    # Slicing the list makes sure we don't process more images than the limit
-    # set by `MAX_IMAGES`.
-    # Note that it first collects all the matching images without considering the limit.
-    return collected_images[:MAX_IMAGES]
+    collected_pdfs = []
+
+    # Find all links that point to PDF files
+    for link in html_content.find_all("a", href=True):
+        href = link["href"]
+        if not href:
+            continue
+
+        full_url = urljoin(url, href)
+
+        # Check if the link points to a PDF file
+        if is_pdf_url(href) or is_pdf_url(full_url):
+            collected_pdfs.append(
+                {
+                    "url": full_url,
+                    "page": url,
+                    "depth": current_depth,
+                    "link_text": link.get_text(strip=True) or "No text",
+                }
+            )
+
+    return collected_pdfs[:MAX_PDFS]
 
 
-def extract_links(html_content: BeautifulSoup, url: str) -> list[str]:
+def extract_links(html_content: BeautifulSoup, url: str, base_domain: str) -> list[str]:
     """
-    Parses HTML content to extract links.
+    Parses HTML content to extract links that belong to the same domain.
 
     Args:
-        html_content (str): BeautifulSoup object containing the parsed HTML content.
-        url (str): The starting URL from which to fetch images.
+        html_content: BeautifulSoup object containing the parsed HTML content.
+        url (str): The starting URL from which to fetch links.
+        base_domain (str): The base domain to restrict crawling to.
 
     Returns:
-        A list of URL strings from the href attributes of anchor tags.
+        A list of URL strings from the href attributes of anchor tags that belong to the same domain.
     """
-    return [a["href"] for a in html_content.find_all("a") if "href" in a.attrs]
+    links = []
+    for a in html_content.find_all("a", href=True):
+        href = a["href"]
+        if href and is_valid_url(href):
+            # Convert relative URLs to absolute
+            full_url = urljoin(url, href)
+            if is_valid_url(full_url) and is_same_domain(full_url, base_domain):
+                links.append(href)
+            else:
+                log.debug(f"Skipping external domain link: {full_url}")
+    return links
 
 
 def hash_url(url: str) -> int:
@@ -97,27 +215,32 @@ def hash_url(url: str) -> int:
     return int(hashlib.sha256(url.encode()).hexdigest(), 16)
 
 
-def fetch_images_from_url(url: str, current_depth: int, max_depth: int) -> list[dict]:
+def fetch_pdfs_from_url(url: str, current_depth: int, max_depth: int) -> list[dict]:
     """
-    Fetch images from a URL and its linked pages up to a specified depth using the BFS algorithm. While traversing the pages, extract images from the current page regardless of depth, but only follows links within the specified depth.
+    Fetch PDFs from a URL and its linked pages up to a specified depth using the BFS algorithm. While traversing the pages, extract PDFs from the current page regardless of depth, but only follows links within the specified depth and same domain.
 
     Args:
-        url (str): The starting URL from which to fetch images.
+        url (str): The starting URL from which to fetch PDFs.
         current_depth (int): The current depth of the URL being processed.
         max_depth (int): The maximum depth to crawl from the starting URL.
 
     Returns:
         A list of dictionaries, each containing the following keys:
-        - 'url': The URL of the image.
-        - 'page': The URL of the page where the image was found.
-        - 'depth': The depth at which the image was found relative to the starting URL.
+        - 'url': The URL of the PDF.
+        - 'page': The URL of the page where the PDF was found.
+        - 'depth': The depth at which the PDF was found relative to the starting URL.
+        - 'link_text': The text of the link pointing to the PDF.
 
-        Returns an empty list if no images are found or in case of a request failure.
+        Returns an empty list if no PDFs are found or in case of a request failure.
     """
     if max_depth <= 0:
         return []
 
-    images = []
+    # Get the base domain from the starting URL to restrict crawling
+    base_domain = get_domain(url)
+    log.info(f"Restricting crawl to domain: {base_domain}")
+
+    pdfs = []
     visited_urls_hashes = set()
     queue = deque([(url, current_depth)])
 
@@ -129,21 +252,23 @@ def fetch_images_from_url(url: str, current_depth: int, max_depth: int) -> list[
             continue
         visited_urls_hashes.add(current_url_hash)
 
-        log.info(f"Fetching images from {current_url} at depth {current_depth}")
+        log.info(f"Fetching PDFs from {current_url} at depth {current_depth}")
         html_content = fetch_html_content(current_url)
-        images.extend(extract_image_urls(html_content, current_url, current_depth))
 
-        # Stop crawling if current depth reaches maximum depth
-        if current_depth == max_depth:
-            continue
-        links = extract_links(html_content, current_url)
-        for link in links:
-            page_url = urljoin(current_url, link)
-            # `current_depth` incremented by 1
-            # indicating it's now one level deeper.
-            queue.append((page_url, current_depth + 1))
+        # Only process if we successfully got HTML content
+        if html_content is not None:
+            pdfs.extend(extract_pdf_urls(html_content, current_url, current_depth))
 
-    return images
+            # Stop crawling if current depth reaches maximum depth
+            if current_depth < max_depth:
+                links = extract_links(html_content, current_url, base_domain)
+                for link in links:
+                    page_url = urljoin(current_url, link)
+                    # `current_depth` incremented by 1
+                    # indicating it's now one level deeper.
+                    queue.append((page_url, current_depth + 1))
+
+    return pdfs
 
 
 def extract_filename_from_url(url: str) -> str:
@@ -159,83 +284,91 @@ def extract_filename_from_url(url: str) -> str:
     parsed_url = urlparse(url)
     path = parsed_url.path
     # use Path to get the last component of the path as filename
-    return Path(path).name
+    filename = Path(path).name
+
+    # If no filename is found, generate one
+    if not filename or not filename.endswith(".pdf"):
+        # Generate a filename from the URL
+        safe_url = (
+            url.replace("://", "_")
+            .replace("/", "_")
+            .replace("?", "_")
+            .replace("&", "_")
+        )
+        filename = f"{safe_url[:50]}.pdf"
+
+    return filename
 
 
-def is_based64_encoded(text: str) -> bool:
+def save_pdfs_metadata(pdfs: list[dict]) -> None:
     """
-    Checks if the given string is a based64 encoded data URI.
+    Saves PDF metadata to a JSON file.
 
     Args:
-        text (str): The string to be checked.
-
-    Returns:
-        bool: True if the string is a Base64-encoded data URI for an image; False otherwise.
-
+        pdfs (list of dict): A list of dictionaries where each dictionary contains the 'url' key with the URL of the PDF to be downloaded and saved.
     """
-    with contextlib.suppress(AttributeError):
-        if text.startswith("data:image") and ";base64" in text:
-            return True
-    return False
-
-
-# def save_image_from_base64(data_uri, filepath):
-#     """
-#     Save an image from a base64 data URI to a file.
-#     """
-#     _, encoded = data_uri.split(",", 1)
-#     data = base64.b64code(encoded)
-#     with open(filepath, "wb") as fp:
-#         fp.write(data)
-
-
-def save_images_metadata(images: list[dict]) -> None:
-    """
-    Saves image metadata to a JSON file.
-
-    Args:
-        images (list of dict): A list of dictionaries where each dictionary contains the 'url' key with the URL of the image to be downloaded and saved.
-    """
-    images_dir = Path("images")
-    if images_dir.exists():
-        shutil.rmtree(images_dir)
+    pdfs_dir = Path("pdfs")
+    if pdfs_dir.exists():
+        shutil.rmtree(pdfs_dir)
     # don't raise an error if directory already exists
-    images_dir.mkdir(exist_ok=True)
+    pdfs_dir.mkdir(exist_ok=True)
 
-    if not images:
-        log.info("No images to save.")
+    if not pdfs:
+        log.info("No PDFs to save.")
         return
 
-    metadata = {"images": images}
-    with open(images_dir / "images.json", "w") as fp:
+    metadata = {"pdfs": pdfs}
+    with open(pdfs_dir / "pdfs.json", "w") as fp:
         json.dump(metadata, fp, indent=4)
 
 
-def save_images_locally(images: list[dict]) -> None:
+def save_pdfs_locally(pdfs: list[dict]) -> None:
     """
-    Downloads and saves images from URLs to disk.
+    Downloads and saves PDFs from URLs to disk.
 
     Args:
-        images (list of dict): A list of dictionaries where each dictionary contains the 'url' key with the URL of the image to be downloaded and saved. The 'url' is used to determine the source of the image and the filename under which the image is saved locally.
+        pdfs (list of dict): A list of dictionaries where each dictionary contains the 'url' key with the URL of the PDF to be downloaded and saved. The 'url' is used to determine the source of the PDF and the filename under which the PDF is saved locally.
     """
-    # tracks downloaded images to avoid duplicates
-    downloaded_images = set()
-    for image in images:
-        if image["url"] in downloaded_images:
-            # skip duplicate images
+    # tracks downloaded PDFs to avoid duplicates
+    downloaded_pdfs = set()
+
+    for pdf in pdfs:
+        if pdf["url"] in downloaded_pdfs:
+            # skip duplicate PDFs
             continue
         try:
-            if is_based64_encoded(image["url"]):
-                log.error("Found Base64-encoded data.")
-                continue
-            with requests.get(image["url"], stream=True) as image_data:
-                image_name = extract_filename_from_url(image["url"])
-                with open(f"images/{image_name}", "wb") as fp:
-                    fp.write(image_data.content)
-                log.info(f"Downloaded image {image_name}")
-                downloaded_images.add(image["url"])
-        except requests.exceptions.RequestException as exc:
-            log.error(f"Failed to download image {image['url']}: {exc}")
+            log.info(f"Downloading PDF from {pdf['url']}")
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+            }
+            with requests.get(
+                pdf["url"], stream=True, headers=headers, timeout=30
+            ) as pdf_response:
+                pdf_response.raise_for_status()  # Raise an error for bad status codes
+
+                # Check if the response is actually a PDF
+                content_type = pdf_response.headers.get("content-type", "").lower()
+                if "pdf" not in content_type and not pdf["url"].lower().endswith(
+                    ".pdf"
+                ):
+                    log.warning(
+                        f"URL {pdf['url']} does not appear to be a PDF (content-type: {content_type})"
+                    )
+                    continue
+
+                pdf_name = extract_filename_from_url(pdf["url"])
+
+                with open(f"pdfs/{pdf_name}", "wb") as fp:
+                    for chunk in pdf_response.iter_content(chunk_size=8192):
+                        fp.write(chunk)
+
+                log.info(f"Downloaded PDF {pdf_name}")
+                downloaded_pdfs.add(pdf["url"])
+
+        except requests.RequestException as exc:
+            log.error(f"Failed to download PDF {pdf['url']}: {exc}")
+        except Exception as exc:
+            log.error(f"Unexpected error downloading PDF {pdf['url']}: {exc}")
 
 
 def main() -> None:
@@ -250,9 +383,9 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    images = fetch_images_from_url(args.start_url, 1, args.depth)
-    save_images_metadata(images)
-    save_images_locally(images)
+    pdfs = fetch_pdfs_from_url(args.start_url, 1, args.depth)
+    save_pdfs_metadata(pdfs)
+    save_pdfs_locally(pdfs)
 
 
 if __name__ == "__main__":
