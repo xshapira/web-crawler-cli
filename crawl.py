@@ -14,8 +14,10 @@ from logger import setup_logger
 
 log = setup_logger(__name__)
 
-# maximum number of PDFs to download
+# maximum number of PDFs to download (when not downloading all)
 MAX_PDFS = 50
+# set to True to download all PDFs without limit
+DOWNLOAD_ALL_PDFS = False
 
 
 def get_domain(url: str) -> str:
@@ -65,7 +67,7 @@ def is_valid_url(url: str) -> bool:
     if any(url.lower().startswith(scheme) for scheme in invalid_schemes):
         return False
 
-    # Skip anchor-only links that don't change the page
+    # skip anchor-only links that don't change the page
     return not url.startswith("#")
 
 
@@ -107,7 +109,6 @@ def fetch_html_content(url: str) -> BeautifulSoup | None:
         return None
 
     try:
-        # Add timeout and better headers
         headers = {
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
         }
@@ -138,7 +139,10 @@ def fetch_html_content(url: str) -> BeautifulSoup | None:
 
 
 def extract_pdf_urls(
-    html_content: BeautifulSoup, url: str, current_depth: int
+    html_content: BeautifulSoup,
+    url: str,
+    current_depth: int,
+    download_all: bool = False,
 ) -> list[dict]:
     """
     Parses HTML content to extract PDF URLs.
@@ -147,6 +151,7 @@ def extract_pdf_urls(
         html_content: BeautifulSoup object containing the parsed HTML content.
         url (str): The starting URL from which to fetch PDFs.
         current_depth (int): The current position in the link hierarchy
+        download_all (bool): If True, download all PDFs found; if False, limit to MAX_PDFS
 
     Returns:
         A list of PDF metadata. Metadata includes the PDF URL, the page URL, and the depth.
@@ -172,7 +177,17 @@ def extract_pdf_urls(
                 }
             )
 
-    return collected_pdfs[:MAX_PDFS]
+    # Limit the number of PDFs processed (only if download_all is False)
+    if download_all:
+        log.debug(f"Found {len(collected_pdfs)} PDFs on {url} (downloading all)")
+        return collected_pdfs
+    else:
+        limited_pdfs = collected_pdfs[:MAX_PDFS]
+        if len(collected_pdfs) > MAX_PDFS:
+            log.warning(
+                f"Found {len(collected_pdfs)} PDFs on {url}, limiting to {MAX_PDFS}"
+            )
+        return limited_pdfs
 
 
 def extract_links(html_content: BeautifulSoup, url: str, base_domain: str) -> list[str]:
@@ -191,8 +206,7 @@ def extract_links(html_content: BeautifulSoup, url: str, base_domain: str) -> li
     for a in html_content.find_all("a", href=True):
         href = a["href"]
         if href and is_valid_url(href):
-            # Convert relative URLs to absolute
-            full_url = urljoin(url, href)
+            full_url = urljoin(url, href)  # convert relative URLs to absolute
             if is_valid_url(full_url) and is_same_domain(full_url, base_domain):
                 links.append(href)
             else:
@@ -215,7 +229,9 @@ def hash_url(url: str) -> int:
     return int(hashlib.sha256(url.encode()).hexdigest(), 16)
 
 
-def fetch_pdfs_from_url(url: str, current_depth: int, max_depth: int) -> list[dict]:
+def fetch_pdfs_from_url(
+    url: str, current_depth: int, max_depth: int, download_all: bool = False
+) -> list[dict]:
     """
     Fetch PDFs from a URL and its linked pages up to a specified depth using the BFS algorithm. While traversing the pages, extract PDFs from the current page regardless of depth, but only follows links within the specified depth and same domain.
 
@@ -223,6 +239,7 @@ def fetch_pdfs_from_url(url: str, current_depth: int, max_depth: int) -> list[di
         url (str): The starting URL from which to fetch PDFs.
         current_depth (int): The current depth of the URL being processed.
         max_depth (int): The maximum depth to crawl from the starting URL.
+        download_all (bool): If True, download all PDFs found; if False, limit to MAX_PDFS per page.
 
     Returns:
         A list of dictionaries, each containing the following keys:
@@ -239,6 +256,11 @@ def fetch_pdfs_from_url(url: str, current_depth: int, max_depth: int) -> list[di
     # Get the base domain from the starting URL to restrict crawling
     base_domain = get_domain(url)
     log.info(f"Restricting crawl to domain: {base_domain}")
+
+    if download_all:
+        log.info("Mode: Download ALL PDFs found (no limit)")
+    else:
+        log.info(f"Mode: Download up to {MAX_PDFS} PDFs per page")
 
     pdfs = []
     visited_urls_hashes = set()
@@ -257,7 +279,9 @@ def fetch_pdfs_from_url(url: str, current_depth: int, max_depth: int) -> list[di
 
         # Only process if we successfully got HTML content
         if html_content is not None:
-            pdfs.extend(extract_pdf_urls(html_content, current_url, current_depth))
+            pdfs.extend(
+                extract_pdf_urls(html_content, current_url, current_depth, download_all)
+            )
 
             # Stop crawling if current depth reaches maximum depth
             if current_depth < max_depth:
@@ -321,6 +345,8 @@ def save_pdfs_metadata(pdfs: list[dict]) -> None:
     with open(pdfs_dir / "pdfs.json", "w") as fp:
         json.dump(metadata, fp, indent=4)
 
+    log.info(f"Saved metadata for {len(pdfs)} PDFs to pdfs/pdfs.json")
+
 
 def save_pdfs_locally(pdfs: list[dict]) -> None:
     """
@@ -332,12 +358,15 @@ def save_pdfs_locally(pdfs: list[dict]) -> None:
     # tracks downloaded PDFs to avoid duplicates
     downloaded_pdfs = set()
 
-    for pdf in pdfs:
+    log.info(f"Starting download of {len(pdfs)} PDFs...")
+
+    for i, pdf in enumerate(pdfs, 1):
         if pdf["url"] in downloaded_pdfs:
             # skip duplicate PDFs
+            log.debug(f"Skipping duplicate PDF: {pdf['url']}")
             continue
         try:
-            log.info(f"Downloading PDF from {pdf['url']}")
+            log.info(f"[{i}/{len(pdfs)}] Downloading PDF from {pdf['url']}")
             headers = {
                 "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
             }
@@ -370,20 +399,37 @@ def save_pdfs_locally(pdfs: list[dict]) -> None:
         except Exception as exc:
             log.error(f"Unexpected error downloading PDF {pdf['url']}: {exc}")
 
+    log.info(f"Download complete. Successfully downloaded {len(downloaded_pdfs)} PDFs.")
+
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Crawl a website and download PDFs")
     parser.add_argument("start_url", help="The starting URL for crawling")
     parser.add_argument(
         "depth",
         nargs="?",
         type=int,
         default=1,
-        help="The depth of crawling (default: 1)",
+        help="The depth of crawling (default: 1). Ignored when using --all flag.",
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Download ALL PDFs found (crawls entire website with unlimited depth)",
     )
     args = parser.parse_args()
 
-    pdfs = fetch_pdfs_from_url(args.start_url, 1, args.depth)
+    # Determine if we should download all PDFs
+    download_all = args.all or DOWNLOAD_ALL_PDFS
+
+    # When downloading all PDFs, use unlimited depth to crawl entire website
+    if download_all:
+        crawl_depth = 999  # using high number to ensure we crawl everything
+        log.info("Download ALL mode: Setting unlimited crawl depth to find every PDF")
+    else:
+        crawl_depth = args.depth
+
+    pdfs = fetch_pdfs_from_url(args.start_url, 1, crawl_depth, download_all)
     save_pdfs_metadata(pdfs)
     save_pdfs_locally(pdfs)
 
